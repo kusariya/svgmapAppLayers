@@ -2,7 +2,7 @@
 import { WebLLMEngine, checkWebGPUSupport } from './engine.js';
 import { getAvailableLayers } from './analyzer.js';
 
-const SELECTED_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC"; // 超軽量な Llama-3.2-1B を採用（メモリ不足回避）
+const SELECTED_MODEL = "SmolLM2-135M-Instruct-q0f16-MLC"; // ご指定のモデルIDに変更
 
 
 class ConciergeUI {
@@ -79,7 +79,7 @@ class ConciergeUI {
                     const text = report.text || "準備中...";
                     this.progressBar.style.width = `${percent}%`;
                     this.progressText.textContent = `モデルを読み込み中... ${percent}% (${text})`;
-                }, { useWorker: false }); // 安定性のためメインスレッドを使用するように変更
+                }); // Worker利用はengine.js側でデフォルト化されたため引数を削除
                 this.isInitialized = true;
                 this.loadingUi.style.display = 'none';
                 this.sendBtn.disabled = false;
@@ -134,12 +134,16 @@ class ConciergeUI {
         } catch (e) {
             const errorMsg = e && (e.message || String(e));
             console.error("[UI] Error in handleSearch:", e);
+            
             this.setStatus(`エラーが発生しました: ${errorMsg || "原因不明のエラー"}`, true);
             this.queryInput.value = originalQuery; // 失敗時は入力を復元
         } finally {
-            this.sendBtn.disabled = false;
-            this.queryInput.disabled = false;
-            this.queryInput.focus();
+            // クールダウン: 5秒間は再入力を無効化
+            setTimeout(() => {
+                this.sendBtn.disabled = false;
+                this.queryInput.disabled = false;
+                this.queryInput.focus();
+            }, 5000);
         }
     }
 
@@ -147,13 +151,14 @@ class ConciergeUI {
         this.resultArea.innerHTML = `<div class="status-msg" style="${isError ? 'color: #d93025; font-weight: bold;' : ''}">${msg}</div>`;
     }
 
-    renderRecommendations(recs, allLayers) {
+    renderRecommendations(recs, allLayers = []) {
         this.resultArea.innerHTML = '';
-        if (recs.length === 0) {
+        if (!recs || recs.length === 0) {
             this.setStatus("お探しのご要望に合うレイヤーが見つかりませんでした。別の言葉で試してみてください。");
             return;
         }
 
+        console.log("[UI] Rendering recommendations:", recs, "Available layers:", allLayers);
         this.currentRecommendations = recs;
 
         // 一括表示ボタンの追加
@@ -165,7 +170,7 @@ class ConciergeUI {
         this.resultArea.appendChild(batchBtn);
 
         recs.forEach(rec => {
-            const layerInfo = allLayers.find(l => l.name === rec.name) || { category: "不明" };
+            const layerInfo = (allLayers && allLayers.find) ? (allLayers.find(l => l.name === rec.name) || { category: "不明" }) : { category: "不明" };
             
             const item = document.createElement('div');
             item.className = 'recommend-item';
