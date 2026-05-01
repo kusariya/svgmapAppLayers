@@ -4,8 +4,9 @@ import { getAvailableLayers } from './analyzer.js';
 
 // https://github.com/mlc-ai/web-llm/blob/main/src/config.ts#L293
 
-const SELECTED_MODEL = "SmolLM2-360M-Instruct-q4f16_1-MLC"; // 4bit量子化版: 約200MB。1GBのVRAMでも余裕を持って動作し、135Mより賢い
-//const SELECTED_MODEL = "SmolLM2-135M-Instruct-q0f16-MLC"; // 135Mは軽量だがループしやすく日本語に弱い
+const SELECTED_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"; // 日本語能力が高いQwenシリーズの最小モデル。約350MBで1GB VRAMに収まる
+//const SELECTED_MODEL = "SmolLM2-360M-Instruct-q4f16_1-MLC"; // 軽量だが日本語にやや弱い
+
 
 class ConciergeUI {
     constructor() {
