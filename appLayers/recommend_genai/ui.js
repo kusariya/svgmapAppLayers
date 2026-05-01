@@ -2,8 +2,10 @@
 import { WebLLMEngine, checkWebGPUSupport } from './engine.js';
 import { getAvailableLayers } from './analyzer.js';
 
-const SELECTED_MODEL = "SmolLM2-135M-Instruct-q0f16-MLC"; // ご指定のモデルIDに変更
+// https://github.com/mlc-ai/web-llm/blob/main/src/config.ts#L293
 
+const SELECTED_MODEL = "SmolLM2-135M-Instruct-q0f16-MLC"; // AMD Ryzen 5 PRO 5650U の内臓グラフィックス(1GB程度)でも安定して動作する
+//const SELECTED_MODEL = "SmolLM2-360M-Instruct-q0f16-MLC"; // AMD Ryzen 5 PRO 5650U の内臓グラフィックスではメモリ不足で落ちる
 
 class ConciergeUI {
     constructor() {
@@ -110,8 +112,8 @@ class ConciergeUI {
         this.sendBtn.disabled = true;
 
         try {
-            const layers = getAvailableLayers();
-            console.log("[UI] Available layers for analysis:", layers);
+            const layers = getAvailableLayers(originalQuery);
+            console.log("[UI] Filtered layers for analysis:", layers);
             
             // 入力が "test" または極端に短い場合はシンプルチャットを試す
             let recommendations;
