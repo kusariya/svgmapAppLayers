@@ -1,4 +1,21 @@
 // analyzer.js
+// Synonym-based Semantic Search (Lightweight)
+
+let synonymCache = null;
+
+async function loadSynonyms() {
+    if (synonymCache) return synonymCache;
+    try {
+        const response = await fetch('./synonyms.json');
+        synonymCache = await response.json();
+        console.log("[Analyzer] Synonyms loaded.");
+        return synonymCache;
+    } catch (e) {
+        console.error("[Analyzer] Failed to load synonyms:", e);
+        synonymCache = {};
+        return synonymCache;
+    }
+}
 
 /**
  * ユーザーが指定した getRootLayersProps() を取得する
@@ -11,8 +28,7 @@ function getRootLayersProps() {
 }
 
 /**
- * 地図から全レイヤーの定義を取得する（フィルタリングなし）
- * @returns {Array<{name: string, category: string}>}
+ * 地図から全レイヤーの定義を取得する
  */
 export function getAllLayerDefinitions() {
     const props = getRootLayersProps();
@@ -21,18 +37,18 @@ export function getAllLayerDefinitions() {
     props.forEach(p => {
         const title = p.title;
         const className = p.className || p.class || "";
-        const groupName = p.groupName || p.category || ""; // categoryプロパティもチェック
+        const groupName = p.groupName || p.category || "";
         
         if (groupName === "basemap" || className.includes("basemap")) return;
         if (!title) return;
 
-        // カテゴリのクレンジング: classNameやgroupNameから抽出
         let rawCat = groupName || className;
         let cleanCategory = rawCat.replace(/(clickable|editable|switch|batch|visibility|hidden)/g, '').trim().replace(/\s+/g, ' '); 
         
         layers.push({
             name: title,
-            category: cleanCategory || "その他"
+            category: cleanCategory || "その他",
+            searchText: `${title} ${cleanCategory || "その他"}`
         });
     });
 
@@ -40,85 +56,58 @@ export function getAllLayerDefinitions() {
 }
 
 /**
- * クエリに基づきレイヤーの関連度を計算し、上位を抽出する（RAG/Retrievalロジック）
- * @param {string} query ユーザーの入力
- * @param {Array} layers 全レイヤーリスト
- * @param {number} limit 抽出件数（デフォルト15）
+ * 同義語展開とキーワードマッチングによるスコアリング
  */
-export function scoreLayers(query, layers, limit = 15) {
+export async function scoreLayers(query, layers, limit = 15) {
     if (!query || query.trim().length === 0) {
         return layers.slice(0, limit).map(l => ({ ...l, relevance: 0 }));
     }
 
+    const synonyms = await loadSynonyms();
     const normalizedQuery = query.toLowerCase();
-    
-    // 1. 基本的なキーワード分割
-    let keywords = normalizedQuery.split(/[\s,，、。．.!！?？]+/).filter(k => k.length > 0);
-    
-    // 2. 日本語（マルチバイト）の場合、2文字ずつのN-gramを追加して部分一致を強化
-    const ngrams = [];
-    keywords.forEach(k => {
-        if (k.length >= 2 && /[^\x00-\x7F]/.test(k)) {
-            for (let i = 0; i < k.length - 1; i++) {
-                ngrams.push(k.substring(i, i + 2));
-            }
-        }
+
+    // 1. キーワード抽出とシノニム展開
+    const queryKeywords = normalizedQuery.match(/[\u4e00-\u9faf]+|[\u30a0-\u30ff]+|[a-z0-9]+/g) || [normalizedQuery];
+    let searchTokens = new Set(queryKeywords);
+    queryKeywords.forEach(kw => {
+        if (synonyms[kw]) synonyms[kw].forEach(s => searchTokens.add(s));
     });
-    keywords = [...new Set([...keywords, ...ngrams])];
-    
+
+    // 2. スコアリング
     const scored = layers.map(l => {
         let score = 0;
         const name = l.name.toLowerCase();
-        const cat = l.category.toLowerCase();
-        
-        keywords.forEach(k => {
-            // 完全一致
-            if (name === k) {
-                score += 20;
-            } 
-            // 名前がキーワードに含まれる、またはその逆（双方向の部分一致）
-            else if (name.includes(k) || k.includes(name)) {
-                score += (k.length >= 2) ? 10 : 2;
-            }
-            
-            // カテゴリへの一致
-            if (cat !== "その他" && (cat.includes(k) || k.includes(cat))) {
-                score += 5;
-            }
+        const searchText = l.searchText.toLowerCase();
+
+        searchTokens.forEach(token => {
+            if (name === token) score += 100;           // 完全一致は圧倒的に優先
+            else if (searchText.includes(token)) score += 20; // 関連テキスト内の出現
+            else if (token.includes(name)) score += 10;      // 逆包含
         });
+
+
         return { ...l, relevance: score };
     });
 
-    // スコア順にソートし、上位を抽出。さらにスコアが0のものは除外する。
-    return scored
-        .filter(l => l.relevance > 0)
+    // 3. フィルタリングとソート
+    // relevance > 0 のものがなければ、全レイヤーをスコア順で返す（空リストを避ける）
+    const filtered = scored.filter(l => l.relevance > 0);
+    const result = filtered.length > 0 ? filtered : scored;
+    
+    return result
         .sort((a, b) => b.relevance - a.relevance)
         .slice(0, limit);
 }
 
 /**
- * レイヤー情報を抽出し、LLMが理解しやすい形式に変換する。
- * クエリが指定された場合、キーワードマッチングによる事前フィルタリング（RAG）を行う。
- * 
- * @param {string} [query] - ユーザーの入力クエリ
- * @returns {Array<{name: string, category: string, relevance?: number}>}
+ * 公開API
  */
-export function getAvailableLayers(query) {
+export async function getAvailableLayers(query) {
     const allLayers = getAllLayerDefinitions();
-    console.log("[Analyzer] Total available layers:", allLayers.length);
-    
-    const filtered = scoreLayers(query, allLayers);
-    console.log("[Analyzer] Filtered layers count:", filtered.length);
-    if (query) {
-        console.log("[Analyzer] Top filtered layer:", filtered[0]);
-    }
-    
-    return filtered;
+    return await scoreLayers(query, allLayers);
 }
 
-// ブラウザ環境でのデバッグ用にグローバルに公開
+// グローバル公開
 if (typeof window !== 'undefined') {
     window.getAvailableLayers = getAvailableLayers;
-    window.getAllLayerDefinitions = getAllLayerDefinitions;
-    window.scoreLayers = scoreLayers;
 }

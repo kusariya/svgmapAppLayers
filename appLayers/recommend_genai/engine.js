@@ -34,8 +34,8 @@ export class WebLLMEngine {
                 
                 // 安定動作のための推奨設定
                 const chatOpts = {
-                    context_window_size: 1024,
-                    temperature: 0.7,
+                    context_window_size: 512,
+                    temperature: 0.2,
                 };
 
                 console.log("[Engine] Initializing with Web Worker...");
@@ -71,28 +71,26 @@ export class WebLLMEngine {
 
                     let content = "";
                     if (layers && layers.length > 0) {
-                        // 候補数を絞り込み、英語の指示と日本語の出力を組み合わせる
-                        const layersStr = layers.map(l => l.name).join(', ');
-                        content = `Task: Recommend up to 3 map layers from the candidates based on the user query.
-User Query: "${query}"
-Candidates: ${layersStr}
+                        const layersStr = layers.map(l => `- ${l.name}`).join('\n');
+                        content = `Select up to 3 layers from the list below:
+${layersStr}
 
-Instructions:
-- Response must be in Japanese.
-- Format: "1. LayerName: Reason"
-- If no match, say "候補なし".
+Query: "${query}"
 
-### Response (Japanese)
-1. `;
+Answer in Japanese in this format:
+1. LayerName: Reason
+`;
                     } else {
                         content = query;
                     }
 
+
+                    // クエリごとのコンテキストを完全にリセットするため、messagesを毎回新規作成
                     const result = await this.engine.chat.completions.create({ 
-                        messages: [{ role: "user", content }],
-                        temperature: 0.2, // 低めにして安定させる
-                        repetition_penalty: 1.15, // ループ防止
-                        max_tokens: 256 // 推奨3件ならこれで十分
+                        messages: [{ role: "user", content }], 
+                        temperature: 0.5, 
+                        repetition_penalty: 1.2,
+                        max_tokens: 128
                     });
 
                     
@@ -148,29 +146,26 @@ Instructions:
         const found = [];
         const lines = answerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         
+        // 行頭が数字で始まり、コロンが含まれる行からレイヤー名と理由を抽出
         for (const line of lines) {
-            // "1. レイヤー名: 理由" の形式を探す
-            // 数字、ドット、記号などの後にレイヤー名が来ることを想定
-            const match = line.match(/^(\d+[\.\s：:]+)?([^:：]+)[:：]\s*(.*)$/);
+            // コロンがあってもなくても抽出できるように調整
+            const match = line.match(/^\d+[\.\s]+([^:：]+)(?:[:：]\s*(.*))?$/);
             if (match) {
-                const potentialName = match[2].trim();
-                const reason = match[3].trim();
-                
-                // レイヤーリストから一致するものを探す（完全一致または前方一致）
+                const potentialName = match[1].trim();
+                const reason = match[2] ? match[2].trim() : "AIが推奨したレイヤーです。";
+
+                // 完全一致または前方一致でレイヤーを特定
                 const layer = availableLayers.find(l => 
-                    potentialName === l.name || 
-                    potentialName.startsWith(l.name) || 
-                    l.name.startsWith(potentialName)
+                    l.name === potentialName || 
+                    potentialName.includes(l.name) || 
+                    l.name.includes(potentialName)
                 );
-                
+
                 if (layer && !found.find(f => f.name === layer.name)) {
-                    if (found.length < 3) {
-                        found.push({ name: layer.name, reason: reason || "AIが推奨したレイヤーです。" });
-                    }
+                    found.push({ name: layer.name, reason: reason });
                 }
             }
         }
-
         // 形式で見つからなかった場合のフォールバック
         if (found.length === 0) {
             for (const layer of availableLayers) {

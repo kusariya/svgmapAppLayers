@@ -113,8 +113,8 @@ class ConciergeUI {
         this.sendBtn.disabled = true;
 
         try {
-            const layers = getAvailableLayers(originalQuery);
-            console.log("[UI] Filtered layers for analysis:", layers);
+            const layers = await getAvailableLayers(originalQuery);
+            console.log("[UI] Semantic filtered layers for analysis:", layers);
             
             // 入力が "test" または極端に短い場合はシンプルチャットを試す
             let recommendations;
