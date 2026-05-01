@@ -90,9 +90,11 @@ Instructions:
 
                     const result = await this.engine.chat.completions.create({ 
                         messages: [{ role: "user", content }],
-                        temperature: 0.1,
-                        max_tokens: 1024 // 応答を十分に長く確保
+                        temperature: 0.2, // 低めにして安定させる
+                        repetition_penalty: 1.15, // ループ防止
+                        max_tokens: 256 // 推奨3件ならこれで十分
                     });
+
                     
                     const reply = result.choices[0].message.content;
                     
