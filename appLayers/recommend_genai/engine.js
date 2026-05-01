@@ -72,7 +72,7 @@ export class WebLLMEngine {
                     let content = "";
                     if (layers && layers.length > 0) {
                         const layersStr = layers.slice(0, 30).map(l => l.name).join(', ');
-                        content = `質問:${query}\n候補:${layersStr}\n最適なレイヤー名を3つ挙げ、理由を短く添えてください。`;
+                        content = `質問:${query}\n候補:${layersStr}\n最適なレイヤー名を3つ挙げ、理由を短く添えてください。\n【厳守ルール】必ず【候補】に含まれるレイヤー名から選ぶこと。適切なレイヤーが一切ない場合は「候補なし」とだけ回答すること。`;
                     } else {
                         content = query;
                     }
@@ -102,6 +102,10 @@ export class WebLLMEngine {
      * AIの自由回答からレイヤー名を探し出す
      */
     _parseSimpleResponse(text, availableLayers) {
+        if (text.includes("候補なし")) {
+            return [{ name: "候補なし", reason: "適切なレイヤーが見つかりませんでした。" }];
+        }
+        
         const found = [];
         for (const layer of availableLayers.slice(0, 15)) {
             if (text.includes(layer.name)) {
@@ -109,9 +113,9 @@ export class WebLLMEngine {
                 break; // 1つ見つかればOK
             }
         }
-        // 見つからない場合は自由回答をそのまま表示
+        // 見つからない場合は自由回答をそのまま表示せず、要件に基づき候補なしとする
         if (found.length === 0) {
-            return [{ name: "AIの提案", reason: text }];
+            return [{ name: "候補なし", reason: "適切なレイヤーが見つかりませんでした。" }];
         }
         return found;
     }

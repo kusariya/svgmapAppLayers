@@ -14,6 +14,9 @@ export function getRootLayersProps() {
 /**
  * レイヤー情報を抽出し、LLMが理解しやすい形式に変換する
  * @returns {Array<{name: string, category: string}>}
+ * 
+ * 仕様: WebLLMからの回答は、必ずここから返されるリストに含まれるレイヤー名のみとすること。
+ * 候補がない場合は「候補なし」とすること。
  */
 export function getAvailableLayers() {
     const props = getRootLayersProps();
@@ -22,15 +25,15 @@ export function getAvailableLayers() {
 
     props.forEach(p => {
         const title = p.title;
-        // SVGの属性名（className）またはプロパティ名を確認
+        // SVGの属性名（className/class）またはプロパティ名を確認
         const className = p.className || p.class || "";
+        const groupName = p.groupName || "";
         
-        // 除外条件: basemap, title空
-        if (className.includes("basemap")) return;
+        // 除外条件: groupNameが"basemap"であるか、classNameに"basemap"を含む場合
+        if (groupName === "basemap" || className.includes("basemap")) return;
         if (!title) return;
 
         // カテゴリのクレンジング
-        // clickable, editable などのメタ情報を除いて純粋なカテゴリ名（災害、気象など）を抽出する
         let cleanCategory = className.replace(/(clickable|editable|switch|batch|visibility|hidden)/g, '').trim().replace(/\s+/g, ' '); 
         
         layers.push({
