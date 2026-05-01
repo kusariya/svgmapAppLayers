@@ -71,8 +71,9 @@ export class WebLLMEngine {
 
                     let content = "";
                     if (layers && layers.length > 0) {
+                        // 文字数制限を考慮し、候補数を減らしてプロンプトを短縮
                         const layersStr = layers.slice(0, 30).map(l => l.name).join(', ');
-                        content = `質問:${query}\n候補:${layersStr}\n最適なレイヤー名を3つ挙げ、理由を短く添えてください。\n【厳守ルール】必ず【候補】に含まれるレイヤー名から選ぶこと。適切なレイヤーが一切ない場合は「候補なし」とだけ回答すること。`;
+                        content = `クエリ:${query}\nレイヤー候補:${layersStr}\n関連するレイヤー名を最大3つ挙げ、理由を短く書いてください。\n【ルール】候補以外の名前は絶対に出力しないこと。候補がない場合は「候補なし」とだけ出力すること。`;
                     } else {
                         content = query;
                     }
@@ -80,7 +81,7 @@ export class WebLLMEngine {
                     const result = await this.engine.chat.completions.create({ 
                         messages: [{ role: "user", content }],
                         temperature: 0.1,
-                        max_tokens: 64
+                        max_tokens: 128 // 応答を十分に長く確保
                     });
                     
                     const reply = result.choices[0].message.content;
@@ -102,20 +103,23 @@ export class WebLLMEngine {
      * AIの自由回答からレイヤー名を探し出す
      */
     _parseSimpleResponse(text, availableLayers) {
+        // AIの返答をデバッグ出力
+        console.log("[Engine] AI Raw Response:", text);
+
         if (text.includes("候補なし")) {
-            return [{ name: "候補なし", reason: "適切なレイヤーが見つかりませんでした。" }];
+            return [{ name: "候補なし", reason: "AIが推奨なしと判断しました。" }];
         }
         
         const found = [];
-        for (const layer of availableLayers.slice(0, 15)) {
+        // 検索範囲を全レイヤーに広げ、一致するものを探す
+        for (const layer of availableLayers) {
             if (text.includes(layer.name)) {
                 found.push({ name: layer.name, reason: text });
-                break; // 1つ見つかればOK
             }
         }
-        // 見つからない場合は自由回答をそのまま表示せず、要件に基づき候補なしとする
+        
         if (found.length === 0) {
-            return [{ name: "候補なし", reason: "適切なレイヤーが見つかりませんでした。" }];
+            return [{ name: "候補なし", reason: "マッチするレイヤーが見つかりませんでした。" }];
         }
         return found;
     }

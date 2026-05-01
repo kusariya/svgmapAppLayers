@@ -153,7 +153,7 @@ class ConciergeUI {
 
     renderRecommendations(recs, allLayers = []) {
         this.resultArea.innerHTML = '';
-        if (!recs || recs.length === 0) {
+        if (!recs || recs.length === 0 || (recs.length === 1 && recs[0].name === "候補なし")) {
             this.setStatus("お探しのご要望に合うレイヤーが見つかりませんでした。別の言葉で試してみてください。");
             return;
         }
